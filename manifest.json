@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube AI Assistant",
+  "version": "1.0",
+  "description": "An AI assistant for YouTube videos with math rendering using local MathJax.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://chatwithai.icu/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/watch*"],
+      "js": [
+        "marked.min.js",
+        "mathjax-config.js",
+        "mathjax/tex-mml-chtml.js",
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon.png"
+    }
+  },
+  "icons": {
+    "48": "icon.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["mathjax/*"],
+      "matches": ["https://www.youtube.com/*"]
+    }
+  ]
+}
