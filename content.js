@@ -5,6 +5,8 @@
   let videoElement;
   let currentVideoTime = 0;
   let wasPlaying = false;
+  let conversations = [];
+  let currentConversationId = null;
 
   const observer = new MutationObserver((mutations, obs) => {
     const ytpRightControls = document.querySelector('.ytp-right-controls');
@@ -21,12 +23,12 @@
   });
 
   function setupVideoTracking() {
-      videoElement = document.querySelector('video');
-      if (videoElement) {
+    videoElement = document.querySelector('video');
+    if (videoElement) {
       videoElement.addEventListener('timeupdate', () => {
-          currentVideoTime = videoElement.currentTime;
+        currentVideoTime = videoElement.currentTime;
       });
-      }
+    }
   }
 
   function formatTimestamp(seconds) {
@@ -48,10 +50,8 @@
   }
 
   function showAIAssistantPopup() {
-    // 检查视频是否正在播放
     wasPlaying = !videoElement.paused;
     
-    // 暂停视频
     if (wasPlaying) {
       videoElement.pause();
     }
@@ -60,6 +60,8 @@
     popup.id = 'ai-assistant-popup';
     popup.innerHTML = `
       <div class="ai-assistant-popup-content">
+        <div id="conversation-list"></div>
+        <button id="new-conversation-btn">New Conversation</button>
         <textarea id="question-input" placeholder="Ask AI Assistant about this video..."></textarea>
         <button id="ask-button">Ask</button>
         <div id="ai-response"></div>
@@ -69,71 +71,101 @@
     document.body.appendChild(popup);
 
     document.getElementById('ask-button').addEventListener('click', handleQuestion);
-    // document.getElementById('summarize-button').addEventListener('click', summarizeVideo);
+    document.getElementById('new-conversation-btn').addEventListener('click', createNewConversation);
+    
     popup.addEventListener('click', (e) => {
       if (e.target === popup) {
         popup.remove();
-        // 如果视频之前在播放，则恢复播放
         if (wasPlaying) {
           videoElement.play();
         }
       }
     });
+
+    loadConversations();
   }
-    
-    
 
-    function showLoading(element) {
-      element.innerHTML = `
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-          <p>AI is thinking...</p>
+  function createNewConversation() {
+    const conversationId = Date.now().toString();
+    conversations.push({
+      id: conversationId,
+      messages: []
+    });
+    currentConversationId = conversationId;
+    updateConversationList();
+    clearConversation();
+  }
+
+  function loadConversations() {
+    chrome.storage.local.get(['conversations'], (result) => {
+      conversations = result.conversations || [];
+      updateConversationList();
+    });
+  }
+
+  function saveConversations() {
+    chrome.storage.local.set({ conversations: conversations });
+  }
+
+  function updateConversationList() {
+    const conversationList = document.getElementById('conversation-list');
+    conversationList.innerHTML = '';
+    conversations.forEach((conversation) => {
+      const conversationElement = document.createElement('div');
+      conversationElement.className = 'conversation-item';
+      conversationElement.textContent = `Conversation ${conversation.id}`;
+      conversationElement.addEventListener('click', () => loadConversation(conversation.id));
+      conversationList.appendChild(conversationElement);
+    });
+  }
+
+  function loadConversation(conversationId) {
+    currentConversationId = conversationId;
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (conversation) {
+      const aiResponse = document.getElementById('ai-response');
+      aiResponse.innerHTML = conversation.messages.map(m => `
+        <div class="${m.role}">
+          <strong>${m.role === 'user' ? 'You' : 'AI'}:</strong> ${m.content}
         </div>
-      `;
+      `).join('');
     }
+  }
 
-    function hideLoading(element) {
-      const loadingSpinner = element.querySelector('.loading-spinner');
-      if (loadingSpinner) {
-        loadingSpinner.remove();
-      }
+  function clearConversation() {
+    document.getElementById('ai-response').innerHTML = '';
+    document.getElementById('question-input').value = '';
+  }
+
+  function showLoading(element) {
+    element.innerHTML = `
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p>AI is thinking...</p>
+      </div>
+    `;
+  }
+
+  function hideLoading(element) {
+    const loadingSpinner = element.querySelector('.loading-spinner');
+    if (loadingSpinner) {
+      loadingSpinner.remove();
     }
-
-    function waitForKaTeX(callback) {
-      if (window.katex) {
-        callback();
-      } else {
-        const observer = new MutationObserver((mutations, obs) => {
-          if (window.katex) {
-            obs.disconnect();
-            callback();
-          }
-        });
-        observer.observe(document, {
-          childList: true,
-          subtree: true
-        });
-      }
-    }
-
-    function log(message) {
-      console.log(`[YouTube AI Assistant]: ${message}`);
   }
 
   function renderMathInElement(element) {
-    // 将方括号替换为 \[ 和 \]
     element.innerHTML = element.innerHTML.replace(/\[([^\]]+)\]/g, (match, formula) => {
-        return `\\[${formula}\\]`;
+      return `\\[${formula}\\]`;
     });
 
-    // 确保 MathJax 已加载并初始化
     if (window.MathJax && window.MathJax.typesetPromise) {
-        MathJax.typesetPromise([element]).catch((err) => console.error('MathJax rendering error:', err));
+      MathJax.typesetPromise([element]).catch((err) => console.error('MathJax rendering error:', err));
     } else {
-        console.error('MathJax is not properly loaded');
+      console.error('MathJax is not properly loaded');
     }
-}
-async function handleQuestion() {
+  }
+
+  async function handleQuestion() {
     const question = document.getElementById('question-input').value;
     const responseElement = document.getElementById('ai-response');
     const timestamp = formatTimestamp(currentVideoTime);
@@ -141,48 +173,41 @@ async function handleQuestion() {
     showLoading(responseElement);
     
     try {
-        let response = await callOpenAI(question, timestamp);
-        console.log('AI response:', response);
+      let response = await callOpenAI(question, timestamp);
+      console.log('AI response:', response);
     
-        hideLoading(responseElement);
+      hideLoading(responseElement);
     
-        if (response && typeof response === 'string') {
-            // // 检查响应是否带有 markdown 语法框
-            // const hasMarkdown = response.includes('```') || response.includes('$$');
-            // // 如果没有 markdown 语法框，则补充```markdown 和 ```结束标记
-            // if (!hasMarkdown) {
-            //     response = '```markdown\n' + response + '\n```';
-            // }
+      if (response && typeof response === 'string') {
+        const userMessage = `<div class="user"><strong>You:</strong> ${question}</div>`;
+        const aiMessage = `<div class="ai"><strong>AI:</strong> ${marked.parse(response)}</div>`;
+        responseElement.innerHTML += userMessage + aiMessage;
+    
+        renderMathInElement(responseElement);
 
-            // 使用 marked 函数来渲染 Markdown
-            responseElement.innerHTML = marked.parse(response);
-    
-            // 渲染数学公式
-            renderMathInElement(responseElement);
-        } else {
-            throw new Error('Invalid response from AI');
+        // Save the conversation
+        if (currentConversationId) {
+          const conversation = conversations.find(c => c.id === currentConversationId);
+          if (conversation) {
+            conversation.messages.push(
+              { role: 'user', content: question },
+              { role: 'assistant', content: response }
+            );
+            saveConversations();
+          }
         }
-    } catch (error) {
-        console.error('Error in handleQuestion:', error);
-        hideLoading(responseElement);
-        responseElement.textContent = `Error: ${error.message}`;
-    }
-}
-  
-    async function summarizeVideo() {
-      const responseElement = document.getElementById('ai-response');
-      responseElement.textContent = "Analyzing video content and generating summary...";
-  
-      try {
-        const response = await callOpenAI("Summarize the key points of this video", "full video");
-        responseElement.innerHTML = `
-          <h3>Video Summary:</h3>
-          <p>${response}</p>
-        `;
-      } catch (error) {
-        responseElement.textContent = `Error: ${error.message}`;
+
+        // Clear the input field
+        document.getElementById('question-input').value = '';
+      } else {
+        throw new Error('Invalid response from AI');
       }
+    } catch (error) {
+      console.error('Error in handleQuestion:', error);
+      hideLoading(responseElement);
+      responseElement.textContent = `Error: ${error.message}`;
     }
+  }
   
     async function captureVideoFrames(timestamp) {
       // 获取用户设置
@@ -228,25 +253,24 @@ async function handleQuestion() {
     
     async function callOpenAI(prompt, context) {
       try {
-        // 获取用户设置的API Key和模型
         const settings = await new Promise(resolve => {
           chrome.storage.sync.get(['apiKey', 'model'], resolve);
         });
-    
+      
         const apiKey = settings.apiKey;
-        const model = settings.model || 'gpt-4o'; // 默认使用gpt-4o
-    
+        const model = settings.model || 'gpt-4o';
+      
         if (!apiKey) {
           throw new Error("API Key not set. Please set your API Key in the extension settings.");
         }
-    
+      
         const timestamp = parseFloat(context.split(':').reduce((acc, time) => (60 * acc) + parseFloat(time)));
         const frames = await captureVideoFrames(timestamp);
-    
+      
         const messages = [
           {
             role: "system",
-            content: "您是YouTube视频的AI助手。提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。"
+            content: "您是明德视界,一个学习相关视频的AI助手。提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。"
           },
           {
             role: "user",
@@ -259,7 +283,15 @@ async function handleQuestion() {
             ]
           }
         ];
-    
+  
+        // Add previous messages from the current conversation
+        if (currentConversationId) {
+          const conversation = conversations.find(c => c.id === currentConversationId);
+          if (conversation) {
+            messages.push(...conversation.messages);
+          }
+        }
+      
         const response = await fetch('https://chatwithai.icu/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -272,14 +304,13 @@ async function handleQuestion() {
             max_tokens: 1024
           })
         });
-    
+      
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-    
+      
         const data = await response.json();
-        // console.log('API response data:', data); // 日志记录 API 的完整响应
-    
+      
         if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
           return data.choices[0].message.content;
         } else {
@@ -287,7 +318,7 @@ async function handleQuestion() {
         }
       } catch (error) {
         console.error('Error in callOpenAI:', error);
-        throw error; // 重新抛出错误以便在 handleQuestion 中捕获
+        throw error;
       }
     }
 })();
