@@ -60,8 +60,8 @@
     popup.id = 'ai-assistant-popup';
     popup.innerHTML = `
       <div class="ai-assistant-popup-content">
-        <div id="conversation-list"></div>
         <button id="new-conversation-btn">New Conversation</button>
+        <button id="clear-conversation-btn">Clear Conversation</button>
         <textarea id="question-input" placeholder="Ask AI Assistant about this video..."></textarea>
         <button id="ask-button">Ask</button>
         <div id="ai-response"></div>
@@ -72,6 +72,7 @@
 
     document.getElementById('ask-button').addEventListener('click', handleQuestion);
     document.getElementById('new-conversation-btn').addEventListener('click', createNewConversation);
+    document.getElementById('clear-conversation-btn').addEventListener('click', clearConversation);
     
     popup.addEventListener('click', (e) => {
       if (e.target === popup) {
@@ -86,37 +87,41 @@
   }
 
   function createNewConversation() {
-    const conversationId = Date.now().toString();
+    currentConversationId = Date.now().toString();
     conversations.push({
-      id: conversationId,
+      id: currentConversationId,
       messages: []
     });
-    currentConversationId = conversationId;
-    updateConversationList();
+    saveConversations();
     clearConversation();
+  }
+
+  function clearConversation() {
+    document.getElementById('ai-response').innerHTML = '';
+    document.getElementById('question-input').value = '';
+    if (currentConversationId) {
+      const conversation = conversations.find(c => c.id === currentConversationId);
+      if (conversation) {
+        conversation.messages = [];
+        saveConversations();
+      }
+    }
   }
 
   function loadConversations() {
     chrome.storage.local.get(['conversations'], (result) => {
       conversations = result.conversations || [];
-      updateConversationList();
+      if (conversations.length === 0) {
+        createNewConversation();
+      } else {
+        currentConversationId = conversations[conversations.length - 1].id;
+        loadConversation(currentConversationId);
+      }
     });
   }
 
   function saveConversations() {
     chrome.storage.local.set({ conversations: conversations });
-  }
-
-  function updateConversationList() {
-    const conversationList = document.getElementById('conversation-list');
-    conversationList.innerHTML = '';
-    conversations.forEach((conversation) => {
-      const conversationElement = document.createElement('div');
-      conversationElement.className = 'conversation-item';
-      conversationElement.textContent = `Conversation ${conversation.id}`;
-      conversationElement.addEventListener('click', () => loadConversation(conversation.id));
-      conversationList.appendChild(conversationElement);
-    });
   }
 
   function loadConversation(conversationId) {
@@ -126,19 +131,15 @@
       const aiResponse = document.getElementById('ai-response');
       aiResponse.innerHTML = conversation.messages.map(m => `
         <div class="${m.role}">
-          <strong>${m.role === 'user' ? 'You' : 'AI'}:</strong> ${m.content}
+          <strong>${m.role === 'user' ? 'You' : 'AI'}:</strong> ${m.role === 'assistant' ? marked.parse(m.content) : m.content}
         </div>
       `).join('');
+      renderMathInElement(aiResponse);
     }
   }
 
-  function clearConversation() {
-    document.getElementById('ai-response').innerHTML = '';
-    document.getElementById('question-input').value = '';
-  }
-
   function showLoading(element) {
-    element.innerHTML = `
+    element.innerHTML += `
       <div class="loading-spinner">
         <div class="spinner"></div>
         <p>AI is thinking...</p>
@@ -173,152 +174,162 @@
     showLoading(responseElement);
     
     try {
+      if (!currentConversationId) {
+        createNewConversation();
+      }
+
       let response = await callOpenAI(question, timestamp);
       console.log('AI response:', response);
     
       hideLoading(responseElement);
     
       if (response && typeof response === 'string') {
-        const userMessage = `<div class="user"><strong>You:</strong> ${question}</div>`;
-        const aiMessage = `<div class="ai"><strong>AI:</strong> ${marked.parse(response)}</div>`;
+        const userMessage = `<div class="user"><strong>You (${new Date().toLocaleTimeString()}):</strong> ${question}</div>`;
+        const aiMessage = `<div class="ai"><strong>AI (${new Date().toLocaleTimeString()}):</strong> ${marked.parse(response)}</div>`;
         responseElement.innerHTML += userMessage + aiMessage;
     
         renderMathInElement(responseElement);
 
         // Save the conversation
-        if (currentConversationId) {
-          const conversation = conversations.find(c => c.id === currentConversationId);
-          if (conversation) {
-            conversation.messages.push(
-              { role: 'user', content: question },
-              { role: 'assistant', content: response }
-            );
-            saveConversations();
-          }
+        const conversation = conversations.find(c => c.id === currentConversationId);
+        if (conversation) {
+          conversation.messages.push(
+            { role: 'user', content: question, timestamp: new Date().toISOString() },
+            { role: 'assistant', content: response, timestamp: new Date().toISOString() }
+          );
+          saveConversations();
         }
 
         // Clear the input field
         document.getElementById('question-input').value = '';
+
+        // Scroll to the bottom of the response area
+        responseElement.scrollTop = responseElement.scrollHeight;
       } else {
         throw new Error('Invalid response from AI');
       }
     } catch (error) {
       console.error('Error in handleQuestion:', error);
       hideLoading(responseElement);
-      responseElement.textContent = `Error: ${error.message}`;
+      responseElement.innerHTML += `<div class="error">Error: ${error.message}</div>`;
     }
   }
   
-    async function captureVideoFrames(timestamp) {
-      // 获取用户设置
-      const settings = await new Promise(resolve => {
-        chrome.storage.sync.get(['beforeTime', 'afterTime'], resolve);
-      });
-      
-      const beforeTime = settings.beforeTime || 30;
-      const afterTime = settings.afterTime || 5;
-      const totalFrames = beforeTime + afterTime;
+  async function captureVideoFrames(timestamp) {
+    const settings = await new Promise(resolve => {
+      chrome.storage.sync.get(['beforeTime', 'afterTime'], resolve);
+    });
     
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const frameCaptureInterval = 1; // 每秒捕获一帧
-      const frames = [];
-      const originalTime = videoElement.currentTime;
-    
-      for (let i = 0; i < totalFrames; i++) {
-        const captureTime = timestamp - beforeTime + i * frameCaptureInterval;
-        if (captureTime >= 0 && captureTime <= videoElement.duration) {
-          videoElement.currentTime = captureTime;
-          await new Promise(resolve => videoElement.addEventListener('seeked', resolve, { once: true }));
-          
-          canvas.width = videoElement.videoWidth;
-          canvas.height = videoElement.videoHeight;
-          ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-          
-          const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
-          frames.push({
-            type: "image_url",
-            image_url: {
-              url: `data:image/jpeg;base64,${base64Image}`
-            }
-          });
-        }
-      }
-    
-      // 恢复原始播放位置
-      videoElement.currentTime = originalTime;
-    
-      return frames;
-    }
-    
-    async function callOpenAI(prompt, context) {
-      try {
-        const settings = await new Promise(resolve => {
-          chrome.storage.sync.get(['apiKey', 'model'], resolve);
-        });
-      
-        const apiKey = settings.apiKey;
-        const model = settings.model || 'gpt-4o';
-      
-        if (!apiKey) {
-          throw new Error("API Key not set. Please set your API Key in the extension settings.");
-        }
-      
-        const timestamp = parseFloat(context.split(':').reduce((acc, time) => (60 * acc) + parseFloat(time)));
-        const frames = await captureVideoFrames(timestamp);
-      
-        const messages = [
-          {
-            role: "system",
-            content: "您是明德视界,一个学习相关视频的AI助手。提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。"
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `在视频的时间戳${context}，用户问道：${prompt}  提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。对于内嵌公式，应该使用$来包裹。`
-              },
-              ...frames
-            ]
-          }
-        ];
+    const beforeTime = settings.beforeTime || 30;
+    const afterTime = settings.afterTime || 5;
+    const totalFrames = beforeTime + afterTime;
   
-        // Add previous messages from the current conversation
-        if (currentConversationId) {
-          const conversation = conversations.find(c => c.id === currentConversationId);
-          if (conversation) {
-            messages.push(...conversation.messages);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const frameCaptureInterval = 1; // 每秒捕获一帧
+    const frames = [];
+    const originalTime = videoElement.currentTime;
+  
+    for (let i = 0; i < totalFrames; i++) {
+      const captureTime = timestamp - beforeTime + i * frameCaptureInterval;
+      if (captureTime >= 0 && captureTime <= videoElement.duration) {
+        videoElement.currentTime = captureTime;
+        await new Promise(resolve => videoElement.addEventListener('seeked', resolve, { once: true }));
+        
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        
+        const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+        frames.push({
+          type: "image_url",
+          image_url: {
+            url: `data:image/jpeg;base64,${base64Image}`
           }
-        }
-      
-        const response = await fetch('https://chatwithai.icu/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: messages,
-            max_tokens: 1024
-          })
         });
-      
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-      
-        const data = await response.json();
-      
-        if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
-          return data.choices[0].message.content;
-        } else {
-          throw new Error('Unexpected API response structure');
-        }
-      } catch (error) {
-        console.error('Error in callOpenAI:', error);
-        throw error;
       }
     }
+  
+    // 恢复原始播放位置
+    videoElement.currentTime = originalTime;
+  
+    return frames;
+  }
+  
+  async function callOpenAI(prompt, context) {
+    try {
+      const settings = await new Promise(resolve => {
+        chrome.storage.sync.get(['apiKey', 'model'], resolve);
+      });
+    
+      const apiKey = settings.apiKey;
+      const model = settings.model || 'gpt-4o';
+    
+      if (!apiKey) {
+        throw new Error("API Key not set. Please set your API Key in the extension settings.");
+      }
+    
+      const timestamp = parseFloat(context.split(':').reduce((acc, time) => (60 * acc) + parseFloat(time)));
+      const frames = await captureVideoFrames(timestamp);
+    
+      const messages = [
+        {
+          role: "system",
+          content: "您是明德视界,一个学习相关视频的AI助手。提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。"
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `在视频的时间戳${context}，用户问道：${prompt}  提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。对于内嵌公式，应该使用$来包裹。`
+            },
+            ...frames
+          ]
+        }
+      ];
+
+      // Add previous messages from the current conversation
+      const conversation = conversations.find(c => c.id === currentConversationId);
+      if (conversation) {
+        messages.push(...conversation.messages);
+      }
+    
+      const response = await fetch('https://chatwithai.icu/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: messages,
+          max_tokens: 1024
+        })
+      });
+    
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+    
+      const data = await response.json();
+    
+      if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+        return data.choices[0].message.content;
+      } else {
+        throw new Error('Unexpected API response structure');
+      }
+    } catch (error) {
+      console.error('Error in callOpenAI:', error);
+      throw error;
+    }
+  }
+
+  // 添加消息监听器
+  chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+    if (request.action === "openConversation") {
+      loadConversation(request.conversationId);
+      showAIAssistantPopup();
+    }
+  });
 })();

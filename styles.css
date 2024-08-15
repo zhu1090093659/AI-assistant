@@ -29,9 +29,49 @@
   padding: 20px;
   border-radius: 8px;
   width: 80%;
-  max-width: 600px;
-  max-height: 80vh;
+  max-width: 800px;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Conversation list styles */
+#conversation-list {
+  flex: 1;
   overflow-y: auto;
+  margin-bottom: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.conversation-item {
+  padding: 8px;
+  margin-bottom: 5px;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.conversation-item:hover {
+  background-color: #e0e0e0;
+}
+
+/* New conversation button */
+#new-conversation-btn {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: background-color 0.2s;
+}
+
+#new-conversation-btn:hover {
+  background-color: #45a049;
 }
 
 /* Input and button styles */
@@ -45,25 +85,25 @@
   resize: vertical;
 }
 
-#ask-button, #summarize-button {
+#ask-button {
   background-color: #065fd4;
   color: white;
   border: none;
   padding: 10px 16px;
-  border-radius: 2px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
   transition: background-color 0.2s;
-  margin-right: 10px;
 }
 
-#ask-button:hover, #summarize-button:hover {
+#ask-button:hover {
   background-color: #1a73e8;
 }
 
 /* AI response styles */
 #ai-response {
+  flex: 2;
   margin-top: 16px;
   padding: 12px;
   background-color: #f8f8f8;
@@ -72,6 +112,7 @@
   line-height: 1.6;
   color: #333;
   font-family: Arial, sans-serif;
+  overflow-y: auto;
 }
 
 #ai-response h1, #ai-response h2, #ai-response h3, #ai-response h4, #ai-response h5, #ai-response h6 {
@@ -125,6 +166,21 @@
 
 #ai-response th {
   background-color: #f4f4f4;
+}
+
+/* Message styles */
+.user, .ai {
+  margin-bottom: 10px;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.user {
+  background-color: #e6f3ff;
+}
+
+.ai {
+  background-color: #f0f0f0;
 }
 
 /* Loading spinner styles */
@@ -184,68 +240,4 @@
   margin-top: 10px;
   font-style: italic;
   color: #333;
-}
-
-/* 对话列表样式 */
-#conversation-list {
-  max-height: 200px;
-  overflow-y: auto;
-  margin-bottom: 10px;
-  border: 1px solid #d3d3d3;
-  border-radius: 4px;
-}
-
-.conversation-item {
-  padding: 8px;
-  cursor: pointer;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.conversation-item:hover {
-  background-color: #f0f0f0;
-}
-
-/* 新建对话按钮样式 */
-#new-conversation-btn {
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  padding: 10px 16px;
-  border-radius: 2px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 10px;
-  transition: background-color 0.2s;
-}
-
-#new-conversation-btn:hover {
-  background-color: #45a049;
-}
-
-/* 对话消息样式 */
-.user, .ai {
-  margin-bottom: 10px;
-  padding: 8px;
-  border-radius: 4px;
-}
-
-.user {
-  background-color: #e6f3ff;
-}
-
-.ai {
-  background-color: #f0f0f0;
-}
-
-/* 调整弹出窗口大小 */
-.ai-assistant-popup-content {
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-
-#ai-response {
-  flex-grow: 1;
-  overflow-y: auto;
 }
