@@ -79,13 +79,19 @@ function loadHistory() {
         conversations.forEach((conversation, index) => {
             const historyItem = document.createElement('div');
             historyItem.className = 'history-item';
-            historyItem.textContent = `对话 ${index + 1}`;
-            historyItem.addEventListener('click', () => openConversation(conversation.id));
+            historyItem.innerHTML = `
+                <input type="checkbox" class="history-checkbox" data-id="${conversation.id}">
+                <span>对话 ${index + 1}</span>
+            `;
+            historyItem.addEventListener('click', (e) => {
+                if (e.target.type !== 'checkbox') {
+                    openConversation(conversation.id);
+                }
+            });
             historyList.appendChild(historyItem);
         });
     });
     
-    // 调整popup大小
     resizePopup();
 }
 
@@ -114,6 +120,19 @@ function openConversation(conversationId) {
     
     // 调整popup大小
     resizePopup();
+}
+
+function deleteSelectedConversations() {
+    const selectedCheckboxes = document.querySelectorAll('.history-checkbox:checked');
+    const selectedIds = Array.from(selectedCheckboxes).map(checkbox => checkbox.dataset.id);
+
+    chrome.storage.local.get(['conversations'], function(result) {
+        let conversations = result.conversations || [];
+        conversations = conversations.filter(conv => !selectedIds.includes(conv.id));
+        chrome.storage.local.set({ conversations }, function() {
+            loadHistory();
+        });
+    });
 }
 
 function loadSettings() {
@@ -146,3 +165,29 @@ function saveSettings() {
         alert('设置已保存！');
     });
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化标签切换
+    initTabs();
+  
+    // 加载历史对话
+    loadHistory();
+  
+    // 加载保存的设置
+    loadSettings();
+  
+    // 保存设置
+    document.getElementById('saveSettings').addEventListener('click', saveSettings);
+    
+    // 调整popup大小
+    resizePopup();
+    
+    // 添加新的事件监听器
+    document.getElementById('selectAllHistory').addEventListener('click', function() {
+        const checkboxes = document.querySelectorAll('.history-checkbox');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        checkboxes.forEach(cb => cb.checked = !allChecked);
+    });
+
+    document.getElementById('deleteSelectedHistory').addEventListener('click', deleteSelectedConversations);
+});
