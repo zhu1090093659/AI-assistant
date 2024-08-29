@@ -1,5 +1,18 @@
 // popup.js
 
+function resizePopup() {
+    const body = document.body;
+    const html = document.documentElement;
+    const height = Math.max(body.scrollHeight, body.offsetHeight, 
+                            html.clientHeight, html.scrollHeight, html.offsetHeight);
+    chrome.windows.getCurrent((window) => {
+        chrome.windows.update(window.id, {
+            width: 400,
+            height: Math.min(600, height + 40) // 40是一个缓冲值,可以根据需要调整
+        });
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // 初始化标签切换
     initTabs();
@@ -12,22 +25,25 @@ document.addEventListener('DOMContentLoaded', function() {
   
     // 保存设置
     document.getElementById('saveSettings').addEventListener('click', saveSettings);
+    
+    // 调整popup大小
+    resizePopup();
 });
-  
+
 function initTabs() {
     const historyTab = document.getElementById('historyTab');
     const settingsTab = document.getElementById('settingsTab');
 
     historyTab.addEventListener('click', function() {
-        openTab('History');
+        openTab('历史');
     });
 
     settingsTab.addEventListener('click', function() {
-        openTab('Settings');
+        openTab('设置');
     });
 
     // 打开默认标签
-    openTab('History');
+    openTab('历史');
 }
 
 function openTab(tabName) {
@@ -42,14 +58,17 @@ function openTab(tabName) {
     }
 
     document.getElementById(tabName).style.display = "block";
-    document.getElementById(tabName === 'History' ? 'historyTab' : 'settingsTab').classList.add("active");
+    document.getElementById(tabName === '历史' ? 'historyTab' : 'settingsTab').classList.add("active");
 
     // 特别处理：如果打开的是设置标签，隐藏 ai-response
-    if (tabName === 'Settings') {
+    if (tabName === '设置') {
         document.getElementById('ai-response').style.display = 'none';
     } else {
         document.getElementById('ai-response').style.display = 'block';
     }
+    
+    // 调整popup大小
+    resizePopup();
 }
 
 function loadHistory() {
@@ -65,6 +84,9 @@ function loadHistory() {
             historyList.appendChild(historyItem);
         });
     });
+    
+    // 调整popup大小
+    resizePopup();
 }
 
 function openConversation(conversationId) {
@@ -75,7 +97,7 @@ function openConversation(conversationId) {
             const aiResponse = document.getElementById('ai-response');
             aiResponse.innerHTML = conversation.messages.map(m => `
                 <div class="${m.role}">
-                    <strong>${m.role === 'user' ? 'You' : 'AI'}:</strong> ${m.content}
+                    <strong>${m.role === 'user' ? '你' : 'AI'}:</strong> ${m.content}
                 </div>
             `).join('');
             
@@ -89,14 +111,19 @@ function openConversation(conversationId) {
             }
         }
     });
+    
+    // 调整popup大小
+    resizePopup();
 }
 
 function loadSettings() {
-    chrome.storage.sync.get(['apiKey', 'model', 'beforeTime', 'afterTime'], function(items) {
+    chrome.storage.sync.get(['apiKey', 'model', 'beforeTime', 'afterTime', 'frameCaptureInterval', 'apiEndpoint'], function(items) {
         document.getElementById('apiKey').value = items.apiKey || '';
         document.getElementById('model').value = items.model || 'gpt-4o';
         document.getElementById('beforeTime').value = items.beforeTime || 30;
         document.getElementById('afterTime').value = items.afterTime || 5;
+        document.getElementById('frameCaptureInterval').value = items.frameCaptureInterval || 1;
+        document.getElementById('apiEndpoint').value = items.apiEndpoint || 'https://chatwithai.icu/v1/chat/completions';
     });
 }
 
@@ -105,12 +132,16 @@ function saveSettings() {
     const model = document.getElementById('model').value;
     const beforeTime = parseInt(document.getElementById('beforeTime').value);
     const afterTime = parseInt(document.getElementById('afterTime').value);
-  
+    const frameCaptureInterval = Math.max(1, Math.round(parseFloat(document.getElementById('frameCaptureInterval').value)));
+    const apiEndpoint = document.getElementById('apiEndpoint').value;
+
     chrome.storage.sync.set({
         apiKey: apiKey,
         model: model,
         beforeTime: beforeTime,
-        afterTime: afterTime
+        afterTime: afterTime,
+        frameCaptureInterval: frameCaptureInterval,
+        apiEndpoint: apiEndpoint
     }, function() {
         alert('设置已保存！');
     });

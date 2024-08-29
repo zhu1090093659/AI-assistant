@@ -1,19 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "YouTube AI Assistant",
+  "name": "视频AI助手",
   "version": "1.0",
-  "description": "An AI assistant for YouTube videos with math rendering using local MathJax.",
+  "description": "YouTube和哔哩哔哩视频的AI助手,支持数学公式渲染。",
   "permissions": [
     "activeTab",
     "storage"
   ],
   "host_permissions": [
     "https://www.youtube.com/*",
+    "https://www.bilibili.com/*",
     "https://chatwithai.icu/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/watch*"],
+      "matches": [
+        "https://www.youtube.com/watch*",
+        "https://www.bilibili.com/video/*"
+      ],
       "js": [
         "marked.min.js",
         "mathjax-config.js",
@@ -37,7 +41,10 @@
   "web_accessible_resources": [
     {
       "resources": ["mathjax/*"],
-      "matches": ["https://www.youtube.com/*"]
+      "matches": ["https://www.youtube.com/*", "https://www.bilibili.com/*"]
     }
-  ]
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
 }

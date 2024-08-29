@@ -11,7 +11,8 @@
             color: #333;
             margin: 0;
             padding: 20px;
-            width: 300px;
+            width: 350px;
+            min-height: 400px;
         }
         .container {
             background-color: #ffffff;
@@ -93,6 +94,14 @@
         .history-item:hover {
             background-color: #d2e3fc;
         }
+        #ai-response {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 20px;
+        }
     </style>
     <script src="mathjax-config.js"></script>
     <script src="mathjax/tex-mml-chtml.js"></script>
@@ -106,11 +115,11 @@
           <button class="tablinks" id="settingsTab">设置</button>
       </div>
 
-      <div id="History" class="tabcontent">
+      <div id="历史" class="tabcontent">
           <div id="history-list"></div>
       </div>
 
-      <div id="Settings" class="tabcontent">
+      <div id="设置" class="tabcontent">
           <div class="form-group">
               <label for="apiKey">API 密钥：</label>
               <input type="text" id="apiKey" name="apiKey">
@@ -129,6 +138,14 @@
           <div class="form-group">
               <label for="afterTime">当前时间之后捕获时间（秒）：</label>
               <input type="number" id="afterTime" name="afterTime">
+          </div>
+          <div class="form-group">
+              <label for="frameCaptureInterval">每隔多少秒捕获一帧：</label>
+              <input type="number" id="frameCaptureInterval" name="frameCaptureInterval" min="1" step="1">
+          </div>
+          <div class="form-group">
+              <label for="apiEndpoint">API 端点：</label>
+              <input type="text" id="apiEndpoint" name="apiEndpoint">
           </div>
           <button id="saveSettings">保存设置</button>
       </div>
