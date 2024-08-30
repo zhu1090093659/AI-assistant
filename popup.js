@@ -143,6 +143,7 @@ function loadSettings() {
         document.getElementById('afterTime').value = items.afterTime || 5;
         document.getElementById('frameCaptureInterval').value = items.frameCaptureInterval || 1;
         document.getElementById('apiEndpoint').value = items.apiEndpoint || 'https://chatwithai.icu/v1/chat/completions';
+        document.getElementById('enableTranscriptionCorrection').checked = items.enableTranscriptionCorrection || false;
     });
 }
 
@@ -153,6 +154,7 @@ function saveSettings() {
     const afterTime = parseInt(document.getElementById('afterTime').value);
     const frameCaptureInterval = Math.max(1, Math.round(parseFloat(document.getElementById('frameCaptureInterval').value)));
     const apiEndpoint = document.getElementById('apiEndpoint').value;
+    const enableTranscriptionCorrection = document.getElementById('enableTranscriptionCorrection').checked;
 
     chrome.storage.sync.set({
         apiKey: apiKey,
@@ -160,7 +162,8 @@ function saveSettings() {
         beforeTime: beforeTime,
         afterTime: afterTime,
         frameCaptureInterval: frameCaptureInterval,
-        apiEndpoint: apiEndpoint
+        apiEndpoint: apiEndpoint,
+        enableTranscriptionCorrection: enableTranscriptionCorrection
     }, function() {
         alert('设置已保存！');
     });

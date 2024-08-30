@@ -91,6 +91,7 @@
         <button id="new-conversation-btn">新对话</button>
         <button id="clear-conversation-btn">清空对话</button>
         <textarea id="question-input" placeholder="询问AI助手关于这个视频的问题..."></textarea>
+        <button id="voice-input-btn">语音输入</button>
         <button id="ask-button">提问</button>
         <div id="ai-response"></div>
       </div>
@@ -101,6 +102,7 @@
     document.getElementById('ask-button').addEventListener('click', handleQuestion);
     document.getElementById('new-conversation-btn').addEventListener('click', createNewConversation);
     document.getElementById('clear-conversation-btn').addEventListener('click', clearConversation);
+    document.getElementById('voice-input-btn').addEventListener('click', handleVoiceInput);
     
     popup.addEventListener('click', (e) => {
       if (e.target === popup) {
@@ -110,6 +112,10 @@
         }
       }
     });
+
+    // 重置录音状态
+    mediaRecorder = null;
+    audioChunks = [];
 
     loadConversations();
   }
@@ -206,32 +212,42 @@
         createNewConversation();
       }
 
+      // 立即添加用户问题到对话历史
+      const userMessage = `<div class="user"><strong>你 (${new Date().toLocaleTimeString()}):</strong> ${question}</div>`;
+      responseElement.innerHTML += userMessage;
+
+      // 保存用户问题到对话历史
+      const conversation = conversations.find(c => c.id === currentConversationId);
+      if (conversation) {
+        conversation.messages.push(
+          { role: 'user', content: question, timestamp: new Date().toISOString() }
+        );
+        saveConversations();
+      }
+
       let response = await callOpenAI(question, timestamp);
       console.log('AI response:', response);
     
       hideLoading(responseElement);
     
       if (response && typeof response === 'string') {
-        const userMessage = `<div class="user"><strong>你 (${new Date().toLocaleTimeString()}):</strong> ${question}</div>`;
         const aiMessage = `<div class="ai"><strong>AI (${new Date().toLocaleTimeString()}):</strong> ${marked.parse(response)}</div>`;
-        responseElement.innerHTML += userMessage + aiMessage;
+        responseElement.innerHTML += aiMessage;
     
         renderMathInElement(responseElement);
 
-        // Save the conversation
-        const conversation = conversations.find(c => c.id === currentConversationId);
+        // 保存AI回答到对话历史
         if (conversation) {
           conversation.messages.push(
-            { role: 'user', content: question, timestamp: new Date().toISOString() },
             { role: 'assistant', content: response, timestamp: new Date().toISOString() }
           );
           saveConversations();
         }
 
-        // Clear the input field
+        // 清空输入框
         document.getElementById('question-input').value = '';
 
-        // Scroll to the bottom of the response area
+        // 滚动到对话框底部
         responseElement.scrollTop = responseElement.scrollHeight;
       } else {
         throw new Error('Invalid response from AI');
@@ -239,7 +255,7 @@
     } catch (error) {
       console.error('Error in handleQuestion:', error);
       hideLoading(responseElement);
-      responseElement.innerHTML += `<div class="error">Error: ${error.message}</div>`;
+      responseElement.innerHTML += `<div class="error">错误: ${error.message}</div>`;
     }
   }
   
@@ -304,14 +320,14 @@
       const messages = [
         {
           role: "system",
-          content: "您是明德视界,一个学习相关视频的AI助手。提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。"
+          content: "您是明德视界,一个学习相关视频的AI助手。请使用简体中文提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。"
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `在视频的时间戳${context}，用户问道：${prompt}  提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。对于内嵌公式，应该使用$来包裹。`
+              text: `在视频的时间戳${context}，用户问道：${prompt}  请使用简体中文提供简洁且相关的答案，当涉及到计算时使用markdown进行回答。对于内嵌公式，应该使用$来包裹。`
             },
             ...frames
           ]
@@ -333,7 +349,8 @@
         body: JSON.stringify({
           model: model,
           messages: messages,
-          max_tokens: 1024
+          max_tokens: 1024,
+          language: "zh-CN" // 指定输出语言为简体中文
         })
       });
   
@@ -351,6 +368,154 @@
     } catch (error) {
       console.error('Error in callOpenAI:', error);
       throw error;
+    }
+  }
+
+  let mediaRecorder;
+  let audioChunks = [];
+  let recordingTimeout;
+
+  async function handleVoiceInput() {
+    const voiceInputBtn = document.getElementById('voice-input-btn');
+
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+      // 开始录音
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.addEventListener("dataavailable", event => {
+          audioChunks.push(event.data);
+        });
+
+        mediaRecorder.addEventListener("stop", async () => {
+          voiceInputBtn.textContent = '处理中...';
+          voiceInputBtn.disabled = true;
+
+          // 检查是否有实际的音频数据
+          if (audioChunks.length === 0 || audioChunks.every(chunk => chunk.size === 0)) {
+            console.log('No audio data recorded');
+            voiceInputBtn.textContent = '语音输入';
+            voiceInputBtn.disabled = false;
+            return;
+          }
+
+          try {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+            const formData = new FormData();
+            formData.append("file", audioBlob, "audio.mp3");
+            formData.append("model", "whisper-1");
+            formData.append("response_format", "verbose_json");
+            formData.append("timestamp_granularities[]", "word");
+            formData.append("language", "zh"); // 指定语言为中文
+
+            const settings = await new Promise(resolve => {
+              chrome.runtime.sendMessage({action: "getSettings"}, resolve);
+            });
+
+            const response = await fetch("https://chatwithai.icu/v1/audio/transcriptions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${settings.apiKey}`
+              },
+              body: formData
+            });
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            let transcribedText = result.text;
+
+            // 如果启用了转录修正,则调用GPT-4o-mini进行修正
+            if (settings.enableTranscriptionCorrection) {
+              transcribedText = await correctTranscription(transcribedText, settings);
+            }
+
+            document.getElementById('question-input').value = transcribedText;
+          } catch (error) {
+            console.error('Error in processing voice input:', error);
+            alert('处理语音输入时出错: ' + error.message);
+          } finally {
+            voiceInputBtn.textContent = '语音输入';
+            voiceInputBtn.disabled = false;
+          }
+        });
+
+        mediaRecorder.start();
+        voiceInputBtn.textContent = '结束录音';
+
+        // 设置30秒后自动结束录音
+        recordingTimeout = setTimeout(() => {
+          if (mediaRecorder && mediaRecorder.state === 'recording') {
+            stopRecording();
+          }
+        }, 30000);
+
+      } catch (error) {
+        console.error('Error in starting voice input:', error);
+        if (error.name === 'NotAllowedError') {
+          alert('无法访问麦克风。请确保您已授予网站麦克风访问权限。');
+        } else {
+          alert('开始语音输入失败: ' + error.message);
+        }
+        voiceInputBtn.textContent = '语音输入';
+      }
+    } else {
+      // 结束录音
+      stopRecording();
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      clearTimeout(recordingTimeout);
+    }
+  }
+
+  async function correctTranscription(text, settings) {
+    const apiKey = settings.apiKey;
+    const apiEndpoint = settings.apiEndpoint || 'https://chatwithai.icu/v1/chat/completions';
+
+    const messages = [
+      {
+        role: "system",
+        content: "你是一个语音转录修正助手。你的任务是修正可能的拼写错误,添加缺失的标点符号,并确保输出为简体中文。请保持原文的意思不变,只进行必要的修正。"
+      },
+      {
+        role: "user",
+        content: `请修正以下文本,确保拼写正确,标点完整,并输出简体中文: "${text}"`
+      }
+    ];
+
+    const response = await fetch(apiEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: messages,
+        max_tokens: 1024,
+        language: "zh-CN"
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+      return data.choices[0].message.content.trim();
+    } else {
+      throw new Error('Unexpected API response structure');
     }
   }
 
