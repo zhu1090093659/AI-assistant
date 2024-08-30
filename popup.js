@@ -136,7 +136,7 @@ function deleteSelectedConversations() {
 }
 
 function loadSettings() {
-    chrome.storage.sync.get(['apiKey', 'model', 'beforeTime', 'afterTime', 'frameCaptureInterval', 'apiEndpoint'], function(items) {
+    chrome.storage.sync.get(['apiKey', 'model', 'beforeTime', 'afterTime', 'frameCaptureInterval', 'apiEndpoint', 'enableTranscriptionCorrection'], function(items) {
         document.getElementById('apiKey').value = items.apiKey || '';
         document.getElementById('model').value = items.model || 'gpt-4o';
         document.getElementById('beforeTime').value = items.beforeTime || 30;
